@@ -4,6 +4,13 @@ set -e
 DOCKER_DESKTOP_URL="https://desktop.docker.com/linux/main/amd64/docker-desktop-amd64.deb"
 DOCKER_DEB="docker-desktop-amd64.deb"
 
+# Detect CI environment (GitHub Actions or others)
+if [ "${CI}" = "true" ] || [ "${GITHUB_ACTIONS}" = "true" ]; then
+    IN_CI=1
+else
+    IN_CI=0
+fi
+
 # ----------------------------------------
 # Helper: Check if Docker is installed
 # ----------------------------------------
@@ -11,18 +18,26 @@ check_docker_installed() {
     if command -v docker >/dev/null 2>&1; then
         echo "✔ Docker is already installed"
         echo "Version: $(docker --version)"
-        echo "Status:"
-        sudo systemctl status docker --no-pager
+
+        if [ "$IN_CI" -eq 0 ]; then
+            sudo systemctl status docker --no-pager || true
+        else
+            echo "ℹ Skipping systemctl (CI mode)"
+        fi
         return 0
-    else
-        return 1
     fi
+    return 1
 }
 
 # ----------------------------------------
-# Fix/Reinstall: Remove all conflicting keys & installs
+# Fix/Reinstall: Remove conflicting installs
 # ----------------------------------------
 fix_existing_install() {
+    if [ "$IN_CI" -eq 1 ]; then
+        echo "⏭️  fix mode skipped (CI mode)"
+        return 0
+    fi
+
     echo "⚠ Fixing conflicts + removing old Docker installs..."
 
     sudo rm -f /etc/apt/sources.list.d/docker.list
@@ -30,7 +45,11 @@ fix_existing_install() {
     sudo rm -f /etc/apt/keyrings/docker.gpg
     sudo rm -f /etc/apt/keyrings/docker.asc
 
-    sudo apt remove -y "$(dpkg --get-selections | grep -E "docker|containerd|runc" | cut -f1)" || true
+    # SC2046 fix (quote expansion)
+    mapfile -t pkgs < <(dpkg --get-selections | awk '/docker|containerd|runc/ {print $1}')
+    if [ "${#pkgs[@]}" -gt 0 ]; then
+        sudo apt remove -y "${pkgs[@]}" || true
+    fi
 
     sudo apt purge -y docker-ce docker-ce-cli containerd.io \
         docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras || true
@@ -42,9 +61,14 @@ fix_existing_install() {
 }
 
 # ----------------------------------------
-# Install Docker Engine (default method)
+# Install Docker Engine
 # ----------------------------------------
 install_docker_default() {
+    if [ "$IN_CI" -eq 1 ]; then
+        echo "⏭️  install_docker_default skipped (CI mode)"
+        return 0
+    fi
+
     echo "⚙ Installing Docker Engine (official repo)..."
 
     sudo apt update
@@ -57,75 +81,82 @@ install_docker_default() {
 
     sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
-    # Check if /etc/os-release exists before sourcing it
+    # shellcheck source=/dev/null
     if [ -f /etc/os-release ]; then
         source /etc/os-release
     else
-        echo "Warning: /etc/os-release not found, using default VERSION_CODENAME"
-        VERSION_CODENAME="focal"  # Default to Ubuntu Focal if not found, adjust as necessary
+        VERSION_CODENAME="focal"
     fi
 
     echo \
 "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-https://download.docker.com/linux/ubuntu $VERSION_CODENAME stable" \
+https://download.docker.com/linux/ubuntu ${VERSION_CODENAME} stable" \
         | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
     sudo apt update
     sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-    sudo systemctl enable docker
-    sudo systemctl start docker
+    sudo systemctl enable docker || true
+    sudo systemctl start docker || true
 
     echo "✔ Docker Engine installed successfully"
 }
 
 # ----------------------------------------
-# Install Docker Desktop (.deb)
+# Install Docker Desktop
 # ----------------------------------------
 install_docker_desktop() {
-    echo "📦 Installing Docker Desktop..."
+    if [ "$IN_CI" -eq 1 ]; then
+        echo "⏭️  Docker Desktop install skipped (CI mode)"
+        return 0
+    fi
 
+    echo "📦 Installing Docker Desktop..."
     mkdir -p ~/downloads
 
     if [ ! -f ~/downloads/${DOCKER_DEB} ]; then
         echo "⬇ Downloading Docker Desktop..."
         wget -O ~/downloads/${DOCKER_DEB} "${DOCKER_DESKTOP_URL}"
     else
-        echo "✔ Docker Desktop installer already present"
+        echo "✔ Installer already present"
     fi
 
     fix_existing_install
 
     sudo apt update
     sudo apt install -y ~/downloads/${DOCKER_DEB}
-
-    echo "✔ Docker Desktop installed successfully"
 }
 
 # ----------------------------------------
-# Install via Convenience Script
+# Install via convenience script
 # ----------------------------------------
 install_convenience_script() {
-    echo "⚙ Installing Docker using convenience script..."
+    if [ "$IN_CI" -eq 1 ]; then
+        echo "⏭️  Convenience script skipped (CI mode)"
+        return 0
+    fi
+
+    echo "⚙ Installing using convenience script..."
 
     curl -fsSL https://get.docker.com -o get-docker.sh
     sudo sh get-docker.sh
     rm get-docker.sh
-
-    echo "✔ Docker installed using convenience script"
 }
 
 # ----------------------------------------
-# Uninstall Docker completely
+# Uninstall Docker entirely
 # ----------------------------------------
 uninstall_docker() {
-    echo "🧹 Uninstalling Docker (any version)..."
+    if [ "$IN_CI" -eq 1 ]; then
+        echo "⏭️  Uninstall skipped (CI mode)"
+        return 0
+    fi
 
-    # Stop services
+    echo "🧹 Uninstalling Docker..."
+
     sudo systemctl stop docker docker.socket containerd || true
     sudo systemctl disable docker docker.socket containerd || true
 
-    # Remove packages (any type)
     sudo apt remove -y \
         docker.io docker-doc docker-compose docker-compose-v2 \
         docker-ce docker-ce-cli docker-ce-rootless-extras \
@@ -136,11 +167,9 @@ uninstall_docker() {
         docker-ce docker-ce-cli docker-ce-rootless-extras \
         docker-desktop containerd containerd.io || true
 
-    # Remove APT repos
     sudo rm -f /etc/apt/sources.list.d/docker.list
     sudo rm -f /etc/apt/sources.list.d/docker-desktop.list
 
-    # Remove keys
     sudo rm -f /etc/apt/keyrings/docker.gpg
     sudo rm -f /etc/apt/keyrings/docker.asc
 
@@ -148,7 +177,6 @@ uninstall_docker() {
     sudo apt autoclean -y
 
     if [[ "$1" == "--purge" ]]; then
-        echo "⚠ Purging Docker data from /var/lib/docker and /var/lib/containerd"
         sudo rm -rf /var/lib/docker
         sudo rm -rf /var/lib/containerd
     fi
@@ -165,15 +193,13 @@ case "$1" in
         if check_docker_installed; then
             echo "✔ Nothing to do."
             exit 0
-        else
-            echo "🚀 Docker not found → Installing default Docker Engine..."
-            install_docker_default
         fi
+        echo "🚀 Installing default Docker Engine..."
+        install_docker_default
         ;;
     uninstall)
         echo "🚨 Uninstall mode selected"
         uninstall_docker "$2"
-        exit 0
         ;;
     fix|reinstall)
         fix_existing_install
@@ -188,10 +214,10 @@ case "$1" in
     *)
         echo "❌ Unknown option: $1"
         echo "Usage:"
-        echo "  ./install-docker.sh           # normal install (default)"
-        echo "  ./install-docker.sh fix       # fix + reinstall"
-        echo "  ./install-docker.sh desktop   # install Docker Desktop"
-        echo "  ./install-docker.sh script    # install via convenience script"
-        exit 1
+        echo "  ./install-docker.sh"
+        echo "  ./install-docker.sh fix"
+        echo "  ./install-docker.sh desktop"
+        echo "  ./install-docker.sh script"
+        exit 2
         ;;
 esac

@@ -15,15 +15,23 @@ jobs:
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
-      # - name: Lint script
-      #   run: shellcheck install-docker.sh
+      - name: Lint script
+        run: shellcheck install-docker.sh
 
       - name: Test syntax (bash -n)
         run: bash -n install-docker.sh
 
       - name: Test help/unknown flag
         run: |
-          ! ./install-docker.sh foobar
+          set +e
+          ./install-docker.sh foobar
+          code=$?
+          if [ "$code" -eq 2 ]; then
+            echo "Unknown flag test passed"
+            exit 0
+          fi
+          echo "Unknown flag test failed: exit code was $code"
+          exit 1
 
       - name: Mock uninstall (no actual removal)
         shell: bash

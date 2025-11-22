@@ -126,4 +126,12 @@ Includes ShellCheck, syntax validation, uninstall simulation.
 
 Workflow: `.github/workflows/test.yml`
 
+# Help
+
+Find help to the relevant issues/info.
+
+Apt-repo: https://docs.docker.com/engine/install/ubuntu/#install-using-the-repository
+Debian: https://docs.docker.com/engine/install/debian/
+Ubuntu-Linux: https://docs.docker.com/desktop/setup/install/linux/ubuntu/
+
 ---

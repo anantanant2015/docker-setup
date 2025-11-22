@@ -23,10 +23,7 @@ jobs:
 
       - name: Test help/unknown flag
         run: |
-          set +e
-          ./install-docker.sh foobar
-          echo "Exit code: $?"
-          [[ $? -ne 0 ]]
+          ! ./install-docker.sh foobar
 
       - name: Mock uninstall (no actual removal)
         shell: bash

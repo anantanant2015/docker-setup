@@ -1,0 +1,43 @@
+name: Test install-docker script
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Lint script
+        run: shellcheck install-docker.sh
+
+      - name: Test syntax (bash -n)
+        run: bash -n install-docker.sh
+
+      - name: Test help/unknown flag
+        run: |
+          set +e
+          ./install-docker.sh foobar
+          code=$?
+          if [ "$code" -eq 2 ]; then
+            echo "Unknown flag test passed"
+            exit 0
+          fi
+          echo "Unknown flag test failed: exit code was $code"
+          exit 1
+
+      - name: Mock uninstall (no actual removal)
+        shell: bash
+        run: |
+          set -e
+          export DRY_RUN=1
+          sed 's/sudo //g' install-docker.sh > mock.sh
+          chmod +x mock.sh
+          ./mock.sh uninstall

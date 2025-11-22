@@ -30,9 +30,7 @@ fix_existing_install() {
     sudo rm -f /etc/apt/keyrings/docker.gpg
     sudo rm -f /etc/apt/keyrings/docker.asc
 
-    sudo apt remove -y $(dpkg --get-selections \
-        | grep -E "docker|containerd|runc" \
-        | cut -f1) || true
+    sudo apt remove -y "$(dpkg --get-selections | grep -E "docker|containerd|runc" | cut -f1)" || true
 
     sudo apt purge -y docker-ce docker-ce-cli containerd.io \
         docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras || true
@@ -59,7 +57,14 @@ install_docker_default() {
 
     sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
-    source /etc/os-release
+    # Check if /etc/os-release exists before sourcing it
+    if [ -f /etc/os-release ]; then
+        source /etc/os-release
+    else
+        echo "Warning: /etc/os-release not found, using default VERSION_CODENAME"
+        VERSION_CODENAME="focal"  # Default to Ubuntu Focal if not found, adjust as necessary
+    fi
+
     echo \
 "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
 https://download.docker.com/linux/ubuntu $VERSION_CODENAME stable" \

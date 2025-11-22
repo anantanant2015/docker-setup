@@ -59,9 +59,10 @@ install_docker_default() {
 
     sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
+    source /etc/os-release
     echo \
 "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" \
+https://download.docker.com/linux/ubuntu $VERSION_CODENAME stable" \
         | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
     sudo apt update
@@ -150,7 +151,6 @@ uninstall_docker() {
     echo "✔ Docker uninstalled successfully"
 }
 
-
 # ----------------------------------------
 # MAIN LOGIC
 # ----------------------------------------
@@ -167,7 +167,7 @@ case "$1" in
         ;;
     uninstall)
         echo "🚨 Uninstall mode selected"
-        uninstall_docker $2
+        uninstall_docker "$2"
         exit 0
         ;;
     fix|reinstall)
@@ -183,10 +183,10 @@ case "$1" in
     *)
         echo "❌ Unknown option: $1"
         echo "Usage:"
-        echo "  ./docker-installer.sh           # normal install (default)"
-        echo "  ./docker-installer.sh fix       # fix + reinstall"
-        echo "  ./docker-installer.sh desktop   # install Docker Desktop"
-        echo "  ./docker-installer.sh script    # install via convenience script"
+        echo "  ./install-docker.sh           # normal install (default)"
+        echo "  ./install-docker.sh fix       # fix + reinstall"
+        echo "  ./install-docker.sh desktop   # install Docker Desktop"
+        echo "  ./install-docker.sh script    # install via convenience script"
         exit 1
         ;;
 esac

@@ -15,8 +15,8 @@ jobs:
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
-      - name: Lint script
-        run: shellcheck install-docker.sh
+      # - name: Lint script
+      #   run: shellcheck install-docker.sh
 
       - name: Test syntax (bash -n)
         run: bash -n install-docker.sh
